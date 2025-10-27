@@ -1,0 +1,171 @@
+# Gatehound Configuration
+# Passive Network Defense & Monitoring System
+
+# Capture configuration
+capture:
+  interface: eth0              # Network interface to monitor
+  mode: span                   # span | inline | live | offline
+  promiscuous: true            # Enable promiscuous mode
+  snaplen: 65536               # Snapshot length (bytes)
+  filter: ""                   # BPF filter (empty = capture all)
+  
+  # Buffer configuration
+  buffer_size: 10000           # Packet buffer size
+  workers: 4                   # Number of worker threads
+
+# PCAP rotation and storage
+pcap:
+  output_path: ./data/pcap     # Base path for PCAP files
+  max_size: 104857600          # Max file size (100MB)
+  rotate_interval: 3600        # Rotation interval (seconds)
+  encrypted: true              # Encrypt stored PCAPs
+  retention_days: 90           # How long to keep PCAPs
+  
+# Policy engine
+policy:
+  mode: strict                 # strict | permissive | learning
+  unknown_device_action: alert # alert | quarantine | block
+  asset_inventory_path: ./data/assets.json
+  
+  # Allowlists
+  mac_allowlist: []
+  ip_allowlist: []
+  
+  # Blocklists
+  mac_blocklist: []
+  ip_blocklist: []
+
+# Enrichment configuration
+enrichment:
+  geoip:
+    enabled: true
+    database_path: ./data/GeoLite2-City.mmdb
+    update_interval: 604800    # 7 days in seconds
+  
+  oui:
+    enabled: true
+    database_path: ./data/oui.txt
+    update_interval: 2592000   # 30 days
+  
+  whois:
+    enabled: true
+    cache_ttl: 3600            # Cache for 1 hour
+    timeout: 10
+  
+  threat_intel:
+    enabled: true
+    sources:
+      - type: stix
+        url: https://threatintel.example.com/stix
+        api_key: ${THREAT_INTEL_API_KEY}
+      - type: blacklist
+        url: https://blacklist.example.com/feed.txt
+
+# Correlation engine
+correlation:
+  enabled: true
+  scoring:
+    unknown_device: 30
+    not_in_inventory: 20
+    suspicious_ua: 15
+    blacklist_match: 50
+    threat_intel_match: 40
+    anomalous_behavior: 25
+  
+  threshold:
+    alert: 50                  # Alert if score >= 50
+    quarantine: 80             # Auto-quarantine if score >= 80
+
+# NAC integration
+nac:
+  enabled: false
+  provider: cisco_ise          # cisco_ise | aruba_clearpass | generic_api
+  endpoint: https://ise.example.com
+  username: ${NAC_USERNAME}
+  password: ${NAC_PASSWORD}
+  api_key: ${NAC_API_KEY}
+  tls_skip_verify: false
+  timeout: 30
+  
+  # Auto-actions
+  auto_quarantine: false       # Automatically quarantine high-risk devices
+  quarantine_vlan: 999         # VLAN ID for quarantine
+
+# Alerting
+alerts:
+  enabled: true
+  channels:
+    slack:
+      enabled: false
+      webhook_url: ${SLACK_WEBHOOK_URL}
+      channel: "#security-alerts"
+    
+    email:
+      enabled: false
+      smtp_host: smtp.example.com
+      smtp_port: 587
+      smtp_user: ${SMTP_USER}
+      smtp_password: ${SMTP_PASSWORD}
+      from: gatehound@example.com
+      to: [security-team@example.com]
+    
+    syslog:
+      enabled: true
+      host: syslog.example.com
+      port: 514
+      protocol: udp             # udp | tcp
+    
+    webhook:
+      enabled: false
+      url: https://api.example.com/alerts
+      headers:
+        Authorization: Bearer ${WEBHOOK_TOKEN}
+
+# PDF report generation
+reports:
+  template: universal          # universal | minimal | detailed
+  output_path: ./reports
+  auto_generate: true          # Auto-generate on detection
+  sign: true                   # Digitally sign reports
+  include:
+    - timeline
+    - device_profile
+    - network_context
+    - threat_intelligence
+    - evidence_manifest
+    - remediation_steps
+
+# Evidence storage
+evidence:
+  base_path: ./evidence
+  encrypted: true
+  encryption_key_path: ./keys/evidence-encryption.key
+  signing_key_path: ./keys/evidence-signing.key
+  retention_days: 365
+  
+  chain_of_custody:
+    enabled: true
+    custodian: SOC-Team
+
+# Metrics
+metrics:
+  enabled: true
+  port: 9091
+  path: /metrics
+
+# Logging
+logging:
+  level: info                  # debug | info | warning | error | critical
+  format: json                 # json | text
+  output: stdout               # stdout | file
+  file_path: ./logs/gatehound.log
+  max_size: 100                # MB
+  max_backups: 10
+  max_age: 30                  # days
+
+# Performance tuning
+performance:
+  max_concurrent_enrichments: 50
+  enrichment_timeout: 30
+  batch_size: 100
+  queue_size: 1000

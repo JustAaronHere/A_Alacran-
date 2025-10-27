@@ -1,0 +1,63 @@
+id: pb-isolate-001
+name: "Isolate Compromised Host"
+description: "Isolate a compromised host from the network to prevent lateral movement"
+version: "1.0"
+author: "Security Team"
+tags:
+  - containment
+  - isolation
+  - incident-response
+requires_approval: true
+idempotent: true
+timeout: 5m
+
+variables:
+  notification_webhook: "https://hooks.example.com/security"
+
+steps:
+  - name: "Verify target accessibility"
+    type: "command"
+    action: "ping -c 1 {{target}}"
+    timeout: 10s
+    continue_on_error: false
+
+  - name: "Isolate host from network"
+    type: "containment"
+    action: "isolate_host"
+    target: "{{target}}"
+    params:
+      method: "nac"
+      reason: "Security incident response"
+    retry:
+      max_attempts: 3
+      delay: 5s
+      backoff_multiplier: 2.0
+
+  - name: "Block outbound traffic"
+    type: "containment"
+    action: "block_ip"
+    target: "{{target}}"
+    params:
+      direction: "outbound"
+      protocol: "all"
+
+  - name: "Document action"
+    type: "command"
+    action: "echo 'Host {{target}} isolated at {{timestamp}}'"
+    continue_on_error: true
+
+rollback:
+  - name: "Remove network isolation"
+    type: "containment"
+    action: "restore_host"
+    target: "{{target}}"
+
+  - name: "Remove IP block"
+    type: "containment"
+    action: "unblock_ip"
+    target: "{{target}}"
+
+metadata:
+  category: "containment"
+  severity: "high"
+  estimated_duration: "2m"

@@ -1,0 +1,256 @@
+# Revenant Configuration
+# Active Response & Remediation Orchestrator
+
+# Orchestration engine
+engine:
+  workers: 10                  # Number of concurrent workers
+  max_retries: 3               # Max retry attempts for failed tasks
+  retry_delay: 5               # Retry delay in seconds (exponential backoff)
+  queue_size: 1000             # Task queue size
+  dead_letter_size: 100        # Dead letter queue size
+
+# Playbook configuration
+playbooks:
+  base_path: ./configs/playbooks
+  auto_load: true              # Load playbooks on startup
+  signed_only: false           # Only run signed playbooks (production: true)
+  signing_key_path: ./keys/playbook-signing.key
+  
+  # Default execution settings
+  defaults:
+    approval_required: true    # Require approval by default
+    approval_timeout: 3600     # Default approval timeout (seconds)
+    dry_run: false             # Dry-run mode for testing
+    audit: true                # Enable audit logging
+
+# Sandbox configuration
+sandbox:
+  enabled: true
+  provider: docker             # docker | podman | vm
+  
+  docker:
+    network: isolated          # isolated | bridge | host
+    cpus: 2
+    memory: 2048               # MB
+    timeout: 600               # seconds
+    image_base: ubuntu:20.04
+  
+  cleanup:
+    auto_cleanup: true
+    cleanup_delay: 60          # Seconds after completion
+
+# EDR integration
+edr:
+  enabled: false
+  provider: crowdstrike        # crowdstrike | sentinelone | carbonblack
+  
+  crowdstrike:
+    base_url: https://api.crowdstrike.com
+    api_key: ${CROWDSTRIKE_API_KEY}
+    api_secret: ${CROWDSTRIKE_API_SECRET}
+    timeout: 30
+  
+  sentinelone:
+    base_url: https://usea1-partners.sentinelone.net
+    api_key: ${SENTINELONE_API_KEY}
+    timeout: 30
+
+# Cloud integration
+cloud:
+  enabled: false
+  
+  aws:
+    enabled: false
+    access_key: ${AWS_ACCESS_KEY}
+    secret_key: ${AWS_SECRET_KEY}
+    region: us-east-1
+    timeout: 30
+  
+  azure:
+    enabled: false
+    subscription_id: ${AZURE_SUBSCRIPTION_ID}
+    tenant_id: ${AZURE_TENANT_ID}
+    client_id: ${AZURE_CLIENT_ID}
+    client_secret: ${AZURE_CLIENT_SECRET}
+    timeout: 30
+  
+  gcp:
+    enabled: false
+    project_id: ${GCP_PROJECT_ID}
+    credentials_file: ${GCP_CREDENTIALS_FILE}
+    timeout: 30
+
+# SIEM integration
+siem:
+  enabled: false
+  provider: splunk             # splunk | elastic | qradar
+  
+  splunk:
+    endpoint: https://splunk.example.com:8088
+    token: ${SPLUNK_HEC_TOKEN}
+    index: security
+    timeout: 10
+  
+  elastic:
+    endpoint: https://elasticsearch.example.com:9200
+    api_key: ${ELASTIC_API_KEY}
+    index: security-events
+    timeout: 10
+
+# Ticketing integration
+ticketing:
+  enabled: false
+  provider: jira               # jira | servicenow | zendesk
+  
+  jira:
+    endpoint: https://jira.example.com
+    username: ${JIRA_USERNAME}
+    api_token: ${JIRA_API_TOKEN}
+    project: SEC
+    timeout: 15
+  
+  servicenow:
+    endpoint: https://instance.service-now.com
+    username: ${SERVICENOW_USERNAME}
+    password: ${SERVICENOW_PASSWORD}
+    timeout: 15
+
+# RBAC configuration
+rbac:
+  enabled: true
+  
+  roles:
+    viewer:
+      permissions: [read]
+    
+    operator:
+      permissions: [read, execute_playbook, approve_low]
+    
+    manager:
+      permissions: [read, execute_playbook, approve_medium, approve_high]
+    
+    admin:
+      permissions: [read, execute_playbook, approve_all, manage_playbooks]
+  
+  # Approval thresholds
+  approval:
+    low_severity: operator
+    medium_severity: manager
+    high_severity: manager
+    critical_severity: admin
+
+# API server
+api:
+  enabled: true
+  host: 0.0.0.0
+  port: 8080
+  
+  tls:
+    enabled: false
+    cert_file: ./certs/server.crt
+    key_file: ./certs/server.key
+  
+  auth:
+    enabled: true
+    method: token              # token | basic | oauth2
+    token_file: ./keys/api-tokens.json
+  
+  cors:
+    enabled: true
+    allowed_origins: ["*"]
+    allowed_methods: [GET, POST, PUT, DELETE]
+    allowed_headers: [Authorization, Content-Type]
+
+# Audit logging
+audit:
+  enabled: true
+  output_path: ./audit
+  format: json
+  include:
+    - playbook_execution
+    - approval_decisions
+    - action_results
+    - api_calls
+  retention_days: 365
+
+# Evidence management
+evidence:
+  base_path: ./evidence
+  encrypted: true
+  signing_enabled: true
+  encryption_key_path: ./keys/evidence-encryption.key
+  signing_key_path: ./keys/evidence-signing.key
+  retention_days: 365
+
+# Integrations with other modules
+integrations:
+  aegis:
+    enabled: false
+    endpoint: http://localhost:8081
+    api_key: ${AEGIS_API_KEY}
+  
+  gatehound:
+    enabled: false
+    endpoint: http://localhost:8082
+    api_key: ${GATEHOUND_API_KEY}
+
+# Metrics
+metrics:
+  enabled: true
+  port: 9092
+  path: /metrics
+  
+  # Custom metrics
+  track:
+    - playbook_executions
+    - task_duration
+    - approval_wait_time
+    - action_success_rate
+    - sandbox_runs
+
+# Logging
+logging:
+  level: info                  # debug | info | warning | error | critical
+  format: json                 # json | text
+  output: stdout               # stdout | file
+  file_path: ./logs/revenant.log
+  max_size: 100                # MB
+  max_backups: 10
+  max_age: 30                  # days
+
+# Notification channels
+notifications:
+  slack:
+    enabled: false
+    webhook_url: ${SLACK_WEBHOOK_URL}
+    channel: "#security-automation"
+  
+  email:
+    enabled: false
+    smtp_host: smtp.example.com
+    smtp_port: 587
+    smtp_user: ${SMTP_USER}
+    smtp_password: ${SMTP_PASSWORD}
+    from: revenant@example.com
+  
+  pagerduty:
+    enabled: false
+    integration_key: ${PAGERDUTY_KEY}
+
+# Performance and safety
+performance:
+  max_concurrent_actions: 50
+  action_timeout: 600          # Default timeout for actions (seconds)
+  batch_operations: true
+  
+safety:
+  require_approval_for:
+    - terminate_instance
+    - delete_data
+    - modify_production
+  
+  rate_limiting:
+    enabled: true
+    max_actions_per_minute: 100
+  
+  dry_run_first: false         # Run dry-run before actual execution

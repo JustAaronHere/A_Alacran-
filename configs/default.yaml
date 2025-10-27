@@ -1,0 +1,66 @@
+# Aegis Scanner Configuration
+
+# Scan settings
+scan:
+  mode: quick
+  concurrency: 100
+  rate_limit: 1000
+  timeout: 300
+  
+  # Discovery settings
+  discovery:
+    enabled: true
+    method: hybrid
+    timeout: 2
+    retries: 2
+  
+  # Port scanning
+  ports:
+    preset: common  # common, top100, top1000, or custom list
+    custom: []
+    banner_grab: true
+    service_detect: true
+  
+  # Fingerprinting
+  fingerprint:
+    enabled: true
+    http: true
+    tls: true
+    timeout: 10
+  
+  # Vulnerability scanning
+  vulnerability:
+    enabled: true
+    db_path: ./data/vulndb.json
+    auto_update: false
+
+# Output settings
+output:
+  format: json  # json, ndjson, sarif, csv, text
+  pretty: true
+  file: ""
+
+# Storage settings
+storage:
+  db_path: ./data/aegis.db
+  retention_days: 90
+  auto_gc: true
+
+# Metrics settings
+metrics:
+  enabled: true
+  port: 9090
+  path: /metrics
+
+# Logging settings
+logging:
+  level: info  # debug, info, warning, error, critical
+  format: json
+  output: stdout
+
+# Security settings
+security:
+  require_sudo: false
+  rate_limiting: true
+  blacklist: []
+  whitelist: []

@@ -1,0 +1,211 @@
+name: unknown-device-response
+version: 1.0.0
+description: Automated response for unknown devices detected on network
+author: network-security-team
+tags: [network, unknown-device, nac, gatehound]
+
+triggers:
+  - event_type: unknown_device_detected
+    conditions:
+      policy: unknown_device_strict
+
+variables:
+  mac_address: ""
+  ip_address: ""
+  hostname: ""
+  switch_ip: ""
+  switch_port: ""
+  device_oui: ""
+  device_vendor: ""
+  detection_time: ""
+  incident_id: ""
+
+preconditions:
+  - check: not_in_asset_inventory
+    params:
+      mac: ${mac_address}
+
+steps:
+  - name: Enrich device information
+    type: enrichment
+    action: collect_device_info
+    params:
+      mac: ${mac_address}
+      ip: ${ip_address}
+      include:
+        - geoip
+        - whois
+        - threat_intel
+        - dhcp_fingerprint
+        - http_ua
+        - tls_fingerprint
+    timeout: 30
+
+  - name: Calculate threat score
+    type: analysis
+    action: score_threat
+    params:
+      device_mac: ${mac_address}
+      factors:
+        - unknown_device
+        - no_inventory_match
+        - threat_intel
+        - behavior_analysis
+    timeout: 10
+
+  - name: Generate preliminary report
+    type: reporting
+    action: generate_pdf
+    params:
+      template: device_detection
+      include:
+        - device_profile
+        - network_context
+        - threat_assessment
+      sign: true
+    on_failure: continue
+
+  - name: Send initial alert
+    type: notification
+    action: send_alert
+    params:
+      channels: [slack, email]
+      priority: medium
+      message: |
+        🔍 Unknown Device Detected
+        
+        MAC: ${mac_address} (${device_vendor})
+        IP: ${ip_address}
+        Location: Switch ${switch_ip}, Port ${switch_port}
+        Threat Score: ${threat_score}/100
+        
+        Awaiting approval for containment.
+      metadata:
+        incident_id: ${incident_id}
+        device_mac: ${mac_address}
+
+  - name: Request containment approval
+    type: approval
+    action: request_approval
+    params:
+      approvers: [network_ops, security_team]
+      timeout: 1800
+      message: "Quarantine unknown device ${mac_address}?"
+      options: [approve, deny, defer]
+    approval_required: true
+    approval_timeout: 1800
+    on_timeout: defer
+
+  - name: Quarantine device via NAC
+    type: containment
+    action: quarantine
+    target: ${mac_address}
+    params:
+      provider: cisco_ise
+      vlan_id: 999
+      reason: "Unknown device - ${incident_id}"
+      notification: true
+    timeout: 60
+
+  - name: Enable port monitoring
+    type: monitoring
+    action: enable_port_monitor
+    params:
+      switch_ip: ${switch_ip}
+      port: ${switch_port}
+      duration: 3600
+      capture_traffic: true
+    on_failure: continue
+
+  - name: Collect network forensics
+    type: forensics
+    action: collect_pcap
+    params:
+      interface: ${monitor_interface}
+      duration: 300
+      filter: "host ${ip_address}"
+      encrypt: true
+    timeout: 360
+
+  - name: Create detailed incident ticket
+    type: ticketing
+    action: create_ticket
+    params:
+      provider: servicenow
+      category: network_security
+      priority: medium
+      short_description: "Unknown device quarantined: ${mac_address}"
+      description: |
+        Unknown Device Incident
+        
+        Device Information:
+        - MAC Address: ${mac_address}
+        - IP Address: ${ip_address}
+        - Vendor: ${device_vendor}
+        - Hostname: ${hostname}
+        
+        Network Location:
+        - Switch: ${switch_ip}
+        - Port: ${switch_port}
+        
+        Detection: ${detection_time}
+        Incident ID: ${incident_id}
+        
+        Actions Taken:
+        - Device quarantined to VLAN 999
+        - Port monitoring enabled
+        - Forensics collected
+        
+        Next Steps:
+        1. Investigate device owner
+        2. Verify if legitimate business need
+        3. Update asset inventory or remove device
+      assignment_group: network_security
+      impact: medium
+      urgency: medium
+
+  - name: Schedule follow-up check
+    type: scheduling
+    action: schedule_task
+    params:
+      task_type: review_quarantine
+      schedule: "+4h"
+      params:
+        incident_id: ${incident_id}
+        mac_address: ${mac_address}
+
+postconditions:
+  - verify: device_quarantined
+    params:
+      mac: ${mac_address}
+      expected_vlan: 999
+
+  - verify: forensics_collected
+    params:
+      incident_id: ${incident_id}
+      evidence_types: [pcap, device_info]
+
+rollback:
+  - name: Restore network access
+    type: containment
+    action: unquarantine
+    target: ${mac_address}
+    params:
+      provider: cisco_ise
+      reason: "False positive or authorized device"
+
+  - name: Disable port monitoring
+    type: monitoring
+    action: disable_port_monitor
+    params:
+      switch_ip: ${switch_ip}
+      port: ${switch_port}
+
+metadata:
+  severity: medium
+  category: network_access_control
+  rbac_role: network_operator
+  audit: true
+  auto_approve: false
+  retention_days: 180
+  compliance: [pci_dss, hipaa]
