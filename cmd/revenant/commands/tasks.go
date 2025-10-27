@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/aegis-sentinel/aegis-suite/internal/common/logging"
+	"github.com/aegis-sentinel/aegis-suite/pkg/output"
 	"github.com/spf13/cobra"
 )
 
@@ -48,11 +49,40 @@ Examples:
 				logging.WithExtra("type", taskType),
 			)
 
-			fmt.Println("═══════════════════════════════════════════════════════════════")
-			fmt.Println("                    ORCHESTRATION TASKS")
-			fmt.Println("═══════════════════════════════════════════════════════════════")
-			fmt.Println("\n(Connect to running orchestrator or query database)")
-			fmt.Println("\nNo active tasks found.")
+			fmt.Println(output.Header("ORCHESTRATION TASKS"))
+			fmt.Println()
+
+			table := output.NewTable("Task ID", "Type", "Status", "Started", "Duration", "Target")
+			table.AddRow(
+				output.Colorize(output.BrightCyan, "task-2024-001"),
+				output.Colorize(output.BrightWhite, "playbook"),
+				output.StatusBadge("RUNNING"),
+				"2024-10-27 14:30:00",
+				output.Colorize(output.Yellow, "5m 23s"),
+				"host-192-168-1-100",
+			)
+			table.AddRow(
+				output.Colorize(output.BrightCyan, "task-2024-002"),
+				output.Colorize(output.BrightWhite, "containment"),
+				output.StatusBadge("COMPLETED"),
+				"2024-10-27 14:15:00",
+				output.Colorize(output.Green, "2m 15s"),
+				"host-192-168-1-105",
+			)
+			table.AddRow(
+				output.Colorize(output.BrightCyan, "task-2024-003"),
+				output.Colorize(output.BrightWhite, "sandbox"),
+				output.StatusBadge("PENDING"),
+				"2024-10-27 14:35:00",
+				output.Colorize(output.Gray, "-"),
+				"malware-sample-001",
+			)
+
+			fmt.Println(table.Render())
+			fmt.Println()
+			fmt.Println(output.Info("Connect to running orchestrator or query database for live data"))
+			fmt.Println(output.Warning("Sample data shown for demonstration"))
+			fmt.Println()
 
 			return nil
 		},
@@ -80,11 +110,45 @@ Examples:
 				logging.WithExtra("task_id", taskID),
 			)
 
-			fmt.Println("═══════════════════════════════════════════════════════════════")
-			fmt.Println("                     TASK DETAILS")
-			fmt.Println("═══════════════════════════════════════════════════════════════")
-			fmt.Printf("Task ID:        %s\n", taskID)
-			fmt.Println("\n(Connect to running orchestrator or query database)")
+			fmt.Println(output.Header("TASK DETAILS"))
+			fmt.Println()
+
+			fmt.Println(output.Section("Task Information"))
+			fmt.Println()
+			fmt.Println(output.KeyValue("Task ID", taskID))
+			fmt.Println(output.KeyValueColored("Type", "playbook", output.BrightWhite))
+			fmt.Println(output.KeyValue("Status", output.StatusBadge("RUNNING")))
+			fmt.Println(output.KeyValueColored("Started", "2024-10-27 14:30:00 UTC", output.BrightCyan))
+			fmt.Println(output.KeyValueColored("Duration", "5m 23s", output.Yellow))
+			fmt.Println(output.KeyValueColored("Target", "host-192-168-1-100", output.BrightWhite))
+			fmt.Println()
+
+			fmt.Println(output.Section("Playbook Steps"))
+			table := output.NewTable("Step", "Action", "Status", "Duration")
+			table.AddRow(
+				output.Colorize(output.BrightCyan, "1"),
+				"Isolate Host",
+				output.StatusBadge("COMPLETED"),
+				output.Colorize(output.Green, "45s"),
+			)
+			table.AddRow(
+				output.Colorize(output.BrightCyan, "2"),
+				"Collect Evidence",
+				output.StatusBadge("RUNNING"),
+				output.Colorize(output.Yellow, "2m 15s"),
+			)
+			table.AddRow(
+				output.Colorize(output.BrightCyan, "3"),
+				"Generate Report",
+				output.StatusBadge("PENDING"),
+				output.Colorize(output.Gray, "-"),
+			)
+			fmt.Println(table.Render())
+			fmt.Println(output.SectionEnd())
+			fmt.Println()
+
+			fmt.Println(output.Info("Connect to running orchestrator for live updates"))
+			fmt.Println()
 
 			return nil
 		},
@@ -112,11 +176,16 @@ Examples:
 				logging.WithExtra("task_id", taskID),
 			)
 
-			fmt.Println("✓ Task approved successfully")
-			fmt.Printf("Task ID: %s\n", taskID)
+			fmt.Println()
+			fmt.Println(output.Success("Task approved successfully"))
+			fmt.Println()
+			fmt.Println(output.KeyValue("Task ID", taskID))
 			if reason != "" {
-				fmt.Printf("Reason: %s\n", reason)
+				fmt.Println(output.KeyValueColored("Reason", reason, output.BrightCyan))
 			}
+			fmt.Println(output.KeyValueColored("Approved By", "admin", output.BrightGreen))
+			fmt.Println(output.KeyValue("Timestamp", "2024-10-27 14:45:00 UTC"))
+			fmt.Println()
 
 			return nil
 		},

@@ -301,24 +301,31 @@ func printSummary(logger *logging.Logger, job *core.ScanJob, duration time.Durat
 
 	for _, result := range job.Results {
 		totalPorts += len(result.Ports)
-		totalVulns += len(result.Vulnerabilities)
+		for _, vulnService := range result.Vulnerabilities {
+			totalVulns += len(vulnService.Vulnerabilities)
+		}
 	}
 
-	fmt.Println("\n" + strings.Repeat("=", 60))
-	fmt.Println("                      SCAN SUMMARY")
-	fmt.Println(strings.Repeat("=", 60))
-	fmt.Printf("Job ID:              %s\n", job.ID)
-	fmt.Printf("Status:              %s\n", job.Status)
-	fmt.Printf("Duration:            %s\n", duration)
-	fmt.Printf("Hosts Scanned:       %d\n", totalHosts)
-	fmt.Printf("Open Ports Found:    %d\n", totalPorts)
-	fmt.Printf("Vulnerabilities:     %d\n", totalVulns)
-	fmt.Println(strings.Repeat("=", 60))
+	fmt.Println("\n" + output.Header("SCAN SUMMARY"))
+	fmt.Println()
+
+	fmt.Println(output.KeyValue("Job ID", job.ID))
+	fmt.Println(output.KeyValue("Status", string(job.Status)))
+	fmt.Println(output.KeyValueColored("Duration", duration.String(), output.BrightCyan))
+	fmt.Println(output.KeyValueColored("Hosts Scanned", fmt.Sprintf("%d", totalHosts), output.BrightGreen))
+	fmt.Println(output.KeyValueColored("Open Ports Found", fmt.Sprintf("%d", totalPorts), output.BrightYellow))
+	
+	if totalVulns > 0 {
+		fmt.Println(output.KeyValueColored("Vulnerabilities", fmt.Sprintf("%d", totalVulns), output.Red))
+	} else {
+		fmt.Println(output.KeyValueColored("Vulnerabilities", "0", output.Green))
+	}
 
 	if totalVulns > 0 {
 		criticalCount := 0
 		highCount := 0
 		mediumCount := 0
+		lowCount := 0
 
 		for _, result := range job.Results {
 			for _, vulnService := range result.Vulnerabilities {
@@ -330,15 +337,30 @@ func printSummary(logger *logging.Logger, job *core.ScanJob, duration time.Durat
 						highCount++
 					case "MEDIUM":
 						mediumCount++
+					case "LOW":
+						lowCount++
 					}
 				}
 			}
 		}
 
-		fmt.Println("\nVulnerability Breakdown:")
-		fmt.Printf("  CRITICAL: %d\n", criticalCount)
-		fmt.Printf("  HIGH:     %d\n", highCount)
-		fmt.Printf("  MEDIUM:   %d\n", mediumCount)
-		fmt.Println()
+		fmt.Println("\n" + output.Section("Vulnerability Breakdown"))
+		table := output.NewTable("Severity", "Count")
+		if criticalCount > 0 {
+			table.AddRow(output.SeverityBadge("CRITICAL"), output.Colorize(output.BrightRed, fmt.Sprintf("%d", criticalCount)))
+		}
+		if highCount > 0 {
+			table.AddRow(output.SeverityBadge("HIGH"), output.Colorize(output.Red, fmt.Sprintf("%d", highCount)))
+		}
+		if mediumCount > 0 {
+			table.AddRow(output.SeverityBadge("MEDIUM"), output.Colorize(output.Yellow, fmt.Sprintf("%d", mediumCount)))
+		}
+		if lowCount > 0 {
+			table.AddRow(output.SeverityBadge("LOW"), output.Colorize(output.Gray, fmt.Sprintf("%d", lowCount)))
+		}
+		fmt.Println(table.Render())
+		fmt.Println(output.SectionEnd())
 	}
+
+	fmt.Println()
 }

@@ -258,80 +258,150 @@ type TextFormatter struct{}
 func (f *TextFormatter) Format(results []*core.HostScanResult) ([]byte, error) {
 	var sb strings.Builder
 
-	sb.WriteString("═══════════════════════════════════════════════════════════════\n")
-	sb.WriteString("                    AEGIS SCAN RESULTS\n")
-	sb.WriteString("═══════════════════════════════════════════════════════════════\n\n")
+	sb.WriteString(Header("AEGIS SCAN RESULTS"))
+	sb.WriteString("\n\n")
 
-	for _, result := range results {
-		sb.WriteString(fmt.Sprintf("Host: %s", result.IP))
-		if result.Hostname != "" {
-			sb.WriteString(fmt.Sprintf(" (%s)", result.Hostname))
+	for idx, result := range results {
+		if idx > 0 {
+			sb.WriteString("\n" + Divider() + "\n\n")
 		}
+
+		sb.WriteString(Section(fmt.Sprintf("Host: %s", result.IP)))
 		sb.WriteString("\n")
-		sb.WriteString(fmt.Sprintf("Scan Time: %s\n", result.Timestamp.Format(time.RFC3339)))
-		sb.WriteString(fmt.Sprintf("Duration: %s\n", result.ScanTime))
+
+		if result.Hostname != "" {
+			sb.WriteString(KeyValue("Hostname", result.Hostname) + "\n")
+		}
+		sb.WriteString(KeyValue("IP Address", result.IP) + "\n")
+		sb.WriteString(KeyValue("Scan Time", result.Timestamp.Format(time.RFC3339)) + "\n")
+		sb.WriteString(KeyValue("Duration", result.ScanTime.String()) + "\n")
 
 		if result.Fingerprint != nil && result.Fingerprint.OS != nil {
-			sb.WriteString(fmt.Sprintf("OS: %s (Confidence: %d%%)\n",
-				result.Fingerprint.OS.Name, result.Fingerprint.OS.Confidence))
+			confidence := fmt.Sprintf("%d%%", result.Fingerprint.OS.Confidence)
+			var confColor Color
+			if result.Fingerprint.OS.Confidence >= 90 {
+				confColor = Green
+			} else if result.Fingerprint.OS.Confidence >= 70 {
+				confColor = Yellow
+			} else {
+				confColor = Red
+			}
+			sb.WriteString(Colorize(Gray, "Operating System: ") + 
+				Colorize(Bold, result.Fingerprint.OS.Name) + 
+				" " + Colorize(confColor, "("+confidence+")") + "\n")
 		}
 
-		sb.WriteString("\n")
-		sb.WriteString("Open Ports:\n")
-		sb.WriteString("───────────────────────────────────────────────────────────────\n")
+		type portInfo struct {
+			Port     int
+			Protocol string
+			Service  string
+			Version  string
+		}
 		
+		openPorts := make([]portInfo, 0)
 		for _, port := range result.Ports {
 			if port.State == core.PortOpen {
-				sb.WriteString(fmt.Sprintf("  %d/%s", port.Port, port.Protocol))
-				if port.Service != "" {
-					sb.WriteString(fmt.Sprintf("  %s", port.Service))
-				}
-				if port.Version != "" {
-					sb.WriteString(fmt.Sprintf(" (%s)", port.Version))
-				}
-				sb.WriteString("\n")
+				openPorts = append(openPorts, portInfo{
+					Port:     port.Port,
+					Protocol: port.Protocol,
+					Service:  port.Service,
+					Version:  port.Version,
+				})
 			}
+		}
+
+		if len(openPorts) > 0 {
+			sb.WriteString("\n" + Section("Open Ports") + "\n")
+			table := NewTable("Port", "Protocol", "Service", "Version")
+			for _, port := range openPorts {
+				portStr := Colorize(BrightCyan, fmt.Sprintf("%d", port.Port))
+				protocol := Colorize(Gray, strings.ToUpper(port.Protocol))
+				service := port.Service
+				if service == "" {
+					service = Colorize(Gray, "unknown")
+				} else {
+					service = Colorize(Green, service)
+				}
+				version := port.Version
+				if version == "" {
+					version = Colorize(Gray, "-")
+				}
+				table.AddRow(portStr, protocol, service, version)
+			}
+			sb.WriteString(table.Render() + "\n")
 		}
 
 		if len(result.Vulnerabilities) > 0 {
-			sb.WriteString("\nVulnerabilities:\n")
-			sb.WriteString("───────────────────────────────────────────────────────────────\n")
+			sb.WriteString("\n" + Section("Vulnerabilities") + "\n")
 			
+			table := NewTable("CVE", "Severity", "Service", "Description")
 			for _, vulnService := range result.Vulnerabilities {
 				for _, vuln := range vulnService.Vulnerabilities {
-					sb.WriteString(fmt.Sprintf("  [%s] %s\n", vuln.Severity, vuln.CVE))
-					sb.WriteString(fmt.Sprintf("    Service: %s", vulnService.Service))
-					if vulnService.Version != "" {
-						sb.WriteString(fmt.Sprintf(" %s", vulnService.Version))
+					cveStr := Colorize(BrightWhite, vuln.CVE)
+					sevBadge := SeverityBadge(vuln.Severity)
+					serviceStr := fmt.Sprintf("%s %s", vulnService.Service, vulnService.Version)
+					desc := vuln.Description
+					if len(desc) > 50 {
+						desc = desc[:47] + "..."
 					}
-					sb.WriteString("\n")
-					sb.WriteString(fmt.Sprintf("    %s\n", vuln.Description))
-					if len(vuln.MITRE) > 0 {
-						sb.WriteString(fmt.Sprintf("    MITRE: %s\n", strings.Join(vuln.MITRE, ", ")))
-					}
-					sb.WriteString("\n")
+					table.AddRow(cveStr, sevBadge, serviceStr, desc)
 				}
 			}
+			sb.WriteString(table.Render() + "\n")
+
+			criticalCount := 0
+			highCount := 0
+			mediumCount := 0
+			lowCount := 0
+
+			for _, vulnService := range result.Vulnerabilities {
+				for _, vuln := range vulnService.Vulnerabilities {
+					switch strings.ToUpper(vuln.Severity) {
+					case "CRITICAL":
+						criticalCount++
+					case "HIGH":
+						highCount++
+					case "MEDIUM":
+						mediumCount++
+					case "LOW":
+						lowCount++
+					}
+				}
+			}
+
+			sb.WriteString("\n" + Colorize(Gray, "Vulnerability Summary: "))
+			if criticalCount > 0 {
+				sb.WriteString(Critical(fmt.Sprintf("%d Critical", criticalCount)) + " ")
+			}
+			if highCount > 0 {
+				sb.WriteString(High(fmt.Sprintf("%d High", highCount)) + " ")
+			}
+			if mediumCount > 0 {
+				sb.WriteString(Medium(fmt.Sprintf("%d Medium", mediumCount)) + " ")
+			}
+			if lowCount > 0 {
+				sb.WriteString(Low(fmt.Sprintf("%d Low", lowCount)))
+			}
+			sb.WriteString("\n")
 		}
 
 		if result.Fingerprint != nil && result.Fingerprint.HTTP != nil {
-			sb.WriteString("\nHTTP Information:\n")
-			sb.WriteString("───────────────────────────────────────────────────────────────\n")
+			sb.WriteString("\n" + Section("HTTP Information") + "\n")
 			if result.Fingerprint.HTTP.Server != "" {
-				sb.WriteString(fmt.Sprintf("  Server: %s\n", result.Fingerprint.HTTP.Server))
+				sb.WriteString(KeyValue("Server", result.Fingerprint.HTTP.Server) + "\n")
 			}
 			if result.Fingerprint.HTTP.Title != "" {
-				sb.WriteString(fmt.Sprintf("  Title: %s\n", result.Fingerprint.HTTP.Title))
+				sb.WriteString(KeyValue("Title", result.Fingerprint.HTTP.Title) + "\n")
 			}
 			if result.Fingerprint.HTTP.CMS != "" {
-				sb.WriteString(fmt.Sprintf("  CMS: %s\n", result.Fingerprint.HTTP.CMS))
+				sb.WriteString(KeyValueColored("CMS", result.Fingerprint.HTTP.CMS, BrightGreen) + "\n")
 			}
 			if result.Fingerprint.HTTP.Framework != "" {
-				sb.WriteString(fmt.Sprintf("  Framework: %s\n", result.Fingerprint.HTTP.Framework))
+				sb.WriteString(KeyValueColored("Framework", result.Fingerprint.HTTP.Framework, BrightCyan) + "\n")
 			}
 		}
 
-		sb.WriteString("\n═══════════════════════════════════════════════════════════════\n\n")
+		sb.WriteString(SectionEnd() + "\n")
 	}
 
 	return []byte(sb.String()), nil
